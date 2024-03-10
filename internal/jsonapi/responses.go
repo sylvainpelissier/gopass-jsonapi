@@ -2,6 +2,8 @@ package jsonapi
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -14,6 +16,7 @@ import (
 	"github.com/gopasspw/gopass/pkg/gopass"
 	"github.com/gopasspw/gopass/pkg/gopass/secrets"
 	"github.com/gopasspw/gopass/pkg/otp"
+	"github.com/gopasspw/gopass/pkg/passkey"
 	"github.com/gopasspw/gopass/pkg/pwgen"
 	potp "github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -40,6 +43,8 @@ func (api *API) sendResponse(ctx context.Context, buf []byte) error {
 		return api.respondHostQuery(ctx, buf)
 	case "getLogin":
 		return api.respondGetLogin(ctx, buf)
+	case "createCredential":
+		return api.respondCreateCredentials(ctx, buf)
 	case "getData":
 		return api.respondGetData(ctx, buf)
 	case "create":
@@ -178,6 +183,37 @@ func (api *API) respondGetData(ctx context.Context, msgBytes []byte) error {
 	converted := convertMixedMapInterfaces(interface{}(responseData))
 
 	return sendResponse(converted, api.Writer)
+}
+
+func (api *API) respondCreateCredentials(ctx context.Context, msgBytes []byte) error {
+	var message createCredentialsMessage
+
+	if err := json.Unmarshal(msgBytes, &message); err != nil {
+		return fmt.Errorf("failed to unmarshal JSON message: %w", err)
+	}
+
+	flags := passkey.CredentialFlags{
+		UserPresent:     true,
+		UserVerified:    true,
+		AttestationData: false,
+		ExtensionData:   false,
+	}
+	cred, _ := passkey.MakeCredential(message.Rp, message.Login, flags)
+
+	sec := secrets.New()
+	_ = sec.Set("id", cred.Id)
+	_ = sec.Set("login", cred.UserName)
+	keyBytes, _ := x509.MarshalPKCS8PrivateKey(cred.KeyValue)
+	_ = sec.Set("key", base64.RawURLEncoding.EncodeToString(keyBytes))
+	_ = sec.Set("algorithm", cred.Algorithm)
+
+	if err := api.Store.Set(ctx, message.Name, sec); err != nil {
+		return fmt.Errorf("failed to store secret: %w", err)
+	}
+
+	return sendResponse(createCredentialsResponse{
+		Id: cred.Id,
+	}, api.Writer)
 }
 
 func (api *API) getUsername(name string, sec gopass.Secret) string {

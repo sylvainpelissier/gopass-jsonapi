@@ -57,6 +57,20 @@ type createEntryMessage struct {
 	UseSymbols     bool   `json:"use_symbols"`
 }
 
+type createCredentialsMessage struct {
+	Name         string `json:"entry_name"`
+	Rp           string `json:"rp"`
+	Login        string `json:"login"`
+	UserPresent  bool   `json:"user_present"`
+	UserVerified bool   `json:"user_verified"`
+}
+
+type createCredentialsResponse struct {
+	Id                string `json:"id"`
+	AttestationObject string `json:"attestation"`
+	PublicKey         string `json:"pubkey"`
+}
+
 type statusResponse struct {
 	Status string `json:"status"`
 }

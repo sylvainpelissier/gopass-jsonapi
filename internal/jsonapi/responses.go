@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"regexp"
@@ -193,22 +194,38 @@ func (api *API) respondCreateCredentials(ctx context.Context, msgBytes []byte) e
 	}
 
 	flags := passkey.CredentialFlags{
-		UserPresent:     true,
-		UserVerified:    true,
+		UserPresent:     message.UserPresent,
+		UserVerified:    message.UserVerified,
 		AttestationData: false,
 		ExtensionData:   false,
 	}
-	cred, _ := passkey.MakeCredential(message.Rp, message.Login, flags)
+	cred, err := passkey.CreateCredential(message.Rp, message.Login, flags)
+	if err != nil {
+		return errors.New("failed to create credential: %w")
+	}
 
 	sec := secrets.New()
-	_ = sec.Set("id", cred.Id)
-	_ = sec.Set("login", cred.UserName)
-	keyBytes, _ := x509.MarshalPKCS8PrivateKey(cred.KeyValue)
-	_ = sec.Set("key", base64.RawURLEncoding.EncodeToString(keyBytes))
-	_ = sec.Set("algorithm", cred.Algorithm)
+	if err = sec.Set("id", cred.Id); err != nil {
+		return errors.New("failed to set secret: %w")
+	}
+	if err = sec.Set("login", cred.UserName); err != nil {
+		return errors.New("failed to set secret: %w")
+	}
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(cred.SecretKey)
+	if err != nil {
+		return errors.New("failed to encode key: %w")
+	}
+	err = sec.Set("key", base64.RawURLEncoding.EncodeToString(keyBytes))
+	if err != nil {
+		return errors.New("failed to encode key: %w")
+	}
 
-	if err := api.Store.Set(ctx, message.Name, sec); err != nil {
-		return fmt.Errorf("failed to store secret: %w", err)
+	if err = sec.Set("algorithm", cred.Algorithm); err != nil {
+		return errors.New("failed to set secret: %w")
+	}
+
+	if err = api.Store.Set(ctx, message.Rp, sec); err != nil {
+		return errors.New("failed to store secret: %w")
 	}
 
 	return sendResponse(createCredentialsResponse{

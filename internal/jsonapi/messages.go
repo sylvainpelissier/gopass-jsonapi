@@ -58,7 +58,6 @@ type createEntryMessage struct {
 }
 
 type createCredentialsMessage struct {
-	Name         string `json:"entry_name"`
 	Rp           string `json:"rp"`
 	Login        string `json:"login"`
 	UserPresent  bool   `json:"user_present"`
@@ -68,7 +67,7 @@ type createCredentialsMessage struct {
 type createCredentialsResponse struct {
 	Id                string `json:"id"`
 	AttestationObject string `json:"attestation"`
-	PublicKey         string `json:"pubkey"`
+	ClientData        string `json:"client_data"`
 }
 
 type statusResponse struct {

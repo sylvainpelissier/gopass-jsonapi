@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -404,4 +405,40 @@ func readAndVerifyMessageLength(t *testing.T, rawMessage []byte) string {
 	require.NoError(t, err)
 
 	return string(msgBytes)
+}
+
+func TestCreateCredentialQuery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := apimock.New()
+	require.NotNil(t, store)
+
+	v, err := semver.Parse("1.2.3-test")
+	require.NoError(t, err)
+
+	var inbuf bytes.Buffer
+	var outbuf bytes.Buffer
+
+	api := New(store, &inbuf, &outbuf, v)
+	msg := createCredentialsMessage{
+		Rp:           "test.com",
+		Login:        "user",
+		UserPresent:  true,
+		UserVerified: true,
+	}
+	msgBytes, err := json.Marshal(msg)
+	require.NoError(t, err)
+	err = api.respondCreateCredentials(ctx, msgBytes)
+	require.NoError(t, err)
+
+	outputMessage := readAndVerifyMessageLength(t, outbuf.Bytes())
+	require.NotNil(t, outputMessage)
+
+	sec, err := api.Store.Get(ctx, "test.com", "latest")
+	require.NoError(t, err)
+
+	login, set := sec.Get("login")
+	require.Equal(t, login, "user")
+	require.True(t, set)
 }
